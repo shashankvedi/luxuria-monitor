@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxuria Rate Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans">
+    <nav class="bg-indigo-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-hotel text-2xl text-yellow-400"></i>
+                <h1 class="font-bold text-lg">Luxuria Monitor <span class="text-xs text-indigo-300 font-normal ml-1">Live Inventory</span></h1>
+            </div>
+            <span id="last-updated" class="text-xs bg-indigo-800 px-3 py-1 rounded-full">Loading...</span>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="flex justify-between items-end mb-6">
+            <h2 class="text-2xl font-bold text-slate-800">Market Overview <span class="text-sm font-normal text-slate-500 block mt-1">Comparision for tomorrow's rates</span></h2>
+            <a id="update-link" href="#" class="hidden md:inline-flex items-center bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded shadow-sm text-sm">
+                <i class="fas fa-sync-alt mr-2 text-indigo-500"></i> Update
+            </a>
+        </div>
+
+        <div id="inventory-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+             <div class="col-span-full text-center py-20 text-slate-500">
+                <i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i><br>Loading data...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const MY_HOTEL_KEYWORD = "Luxuria";
+        // Auto-detect Repo URL for button
+        const repo = window.location.href.split('github.io/')[1]?.split('/')[0];
+        if(repo) document.getElementById('update-link').href = `https://github.com/${window.location.host.split('.')[0]}/${repo}/actions`;
+
+        async function loadData() {
+            try {
+                const response = await fetch('prices.json');
+                if (!response.ok) throw new Error("Data missing");
+                renderInventory(await response.json());
+            } catch (e) {
+                document.getElementById('inventory-grid').innerHTML = `<div class="col-span-full text-center py-10 bg-white rounded shadow text-red-500 font-bold">No Data Found. Please run the Scraper in Actions tab.</div>`;
+            }
+        }
+
+        function renderInventory(history) {
+            if (!history.length) return;
+            const latest = history[history.length - 1];
+            document.getElementById('last-updated').innerText = `Last Scan: ${latest.date}`;
+            
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+            
+            const hotelData = latest.data || latest.prices;
+            const entries = Object.entries(hotelData).sort((a, b) => {
+                return b[0].includes(MY_HOTEL_KEYWORD) - a[0].includes(MY_HOTEL_KEYWORD);
+            });
+
+            entries.forEach(([name, inventory]) => {
+                const isMine = name.includes(MY_HOTEL_KEYWORD);
+                const border = isMine ? "border-2 border-blue-500 ring-4 ring-blue-50" : "border border-slate-200";
+                const bg = isMine ? "bg-blue-600 text-white" : "bg-slate-50 text-slate-700";
+                
+                let listHtml = '', lowest = Infinity, count = 0;
+                
+                if (!inventory || Object.keys(inventory).length === 0) {
+                     lowest = 0;
+                     listHtml = `<li class="text-center text-red-400 text-sm italic py-4">Sold Out / No Data</li>`;
+                } else {
+                    Object.entries(inventory).sort((a,b) => a[1]-b[1]).forEach(([room, price]) => {
+                        count++;
+                        if (count===1) lowest = price;
+                        const rowClass = count===1 ? (isMine ? "bg-blue-50 -mx-5 px-5" : "bg-green-50 -mx-5 px-5") : "";
+                        const priceClass = count===1 ? "font-bold text-slate-900" : "text-slate-600";
+                        
+                        listHtml += `<li class="flex justify-between py-2 border-b border-slate-100 last:border-0 ${rowClass}">
+                            <span class="text-sm truncate w-2/3" title="${room}">${room}</span>
+                            <span class="${priceClass}">₹${price.toLocaleString()}</span>
+                        </li>`;
+                    });
+                }
+
+                grid.innerHTML += `
+                    <div class="bg-white rounded-xl overflow-hidden hover:shadow-lg transition-all ${border}">
+                        <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center ${bg}">
+                            <h3 class="font-bold truncate w-2/3" title="${name}">${name}</h3>
+                            <span class="text-sm font-bold px-3 py-1 rounded bg-white text-slate-700 shadow-sm">
+                                ${lowest > 0 ? '₹'+lowest.toLocaleString() : 'N/A'}
+                            </span>
+                        </div>
+                        <div class="p-5">
+                            <ul class="space-y-1 max-h-60 overflow-y-auto custom-scroll pr-1">${listHtml}</ul>
+                        </div>
+                    </div>`;
+            });
+        }
+        loadData();
+    </script>
+</body>
+</html>
