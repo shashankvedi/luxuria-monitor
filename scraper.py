@@ -1,4 +1,4 @@
-import requests
+from curl_cffi import requests # Stealth Library
 from bs4 import BeautifulSoup
 import json
 from datetime import datetime, timedelta
@@ -8,14 +8,14 @@ import time
 
 # --- CONFIGURATION ---
 def get_dates():
-    # Check 2 weeks ahead to ensure availability (Avoids "Sold Out" errors)
+    # Check 14 days in advance to ensure rooms are available
     checkin_date = datetime.now() + timedelta(days=14)
     checkout_date = checkin_date + timedelta(days=1)
     return checkin_date.strftime("%Y-%m-%d"), checkout_date.strftime("%Y-%m-%d")
 
 checkin, checkout = get_dates()
 
-# --- YOUR EXACT URLS ---
+# --- YOUR EXACT URLS (Verified) ---
 COMPETITORS = [
     { "name": "Luxuria by Moustache", "url": f"https://www.booking.com/hotel/in/luxuria-varanasi-by-moustache.en-gb.html?checkin={checkin}&checkout={checkout}" },
     { "name": "Minimalist Varanasi", "url": f"https://www.booking.com/hotel/in/minimalist-varanasi-city-centre.en-gb.html?checkin={checkin}&checkout={checkout}" },
@@ -31,51 +31,50 @@ COMPETITORS = [
 DATA_FILE = "prices.json"
 
 def get_inventory(url):
-    # ROTATING USER AGENTS (To prevent blocking)
-    user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
-    ]
-    
-    headers = {
-        "User-Agent": random.choice(user_agents),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Upgrade-Insecure-Requests": "1",
-        "Referer": "https://www.google.com/"
-    }
-    
     try:
-        response = requests.get(url, headers=headers, timeout=30)
+        # IMPERSONATE CHROME (The Secret Weapon)
+        # This makes the server think we are a real Chrome 110 browser
+        response = requests.get(url, impersonate="chrome110", timeout=30)
         
-        # Check if blocked
-        if response.status_code == 403 or "Just a moment" in response.text:
-            print(f"   [BLOCKED] Server blocked the request.")
+        # Check if we got a valid page
+        if response.status_code != 200:
+            print(f"   [ERROR] Status Code: {response.status_code}")
             return {}
-
+            
         soup = BeautifulSoup(response.text, 'html.parser')
         inventory = {}
         
-        # --- STRATEGY: SCAN ALL ELEMENTS ---
-        # 1. Main Table Scan
+        # Debug Title
+        if soup.title:
+            print(f"   [Title] {soup.title.string.strip()[:40]}...")
+
+        # 1. Main Table Scan (Desktop View)
         rows = soup.select('tr')
+        found_any = False
+        
         for row in rows:
-            # Name
-            name = row.select_one('.hprt-roomtype-icon-link') or row.select_one('[data-testid="room-name"]')
-            # Price
-            price = row.select_one('.bui-price-display__value') or row.select_one('[data-testid="price-and-discounted-price"]')
+            # Find Name
+            name_elem = row.select_one('.hprt-roomtype-icon-link')
+            if not name_elem: name_elem = row.select_one('[data-testid="room-name"]')
             
-            if name and price:
-                r_name = name.text.strip().replace("\n", " ")
-                r_price_txt = ''.join(c for c in price.text if c.isdigit() or c == '.')
+            # Find Price
+            price_elem = row.select_one('.bui-price-display__value')
+            if not price_elem: price_elem = row.select_one('[data-testid="price-and-discounted-price"]')
+            if not price_elem: price_elem = row.select_one('.prco-valign-middle-helper')
+            
+            if name_elem and price_elem:
+                found_any = True
+                r_name = name_elem.text.strip().replace("\n", " ")
+                # Clean Price
+                r_price_txt = ''.join(c for c in price_elem.text if c.isdigit() or c == '.')
                 if r_price_txt:
                     p = float(r_price_txt)
+                    # Logic: Keep lowest price for this room name
                     if r_name not in inventory or p < inventory[r_name]:
                         inventory[r_name] = p
 
-        # 2. Card Scan (Fallback)
-        if not inventory:
+        # 2. Card Scan (Mobile/Search Redirect)
+        if not found_any:
             cards = soup.select('[data-testid="property-card"]')
             for card in cards:
                 title = card.select_one('[data-testid="title"]')
@@ -101,11 +100,11 @@ def main():
     today_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     new_entry = { "date": today_str, "data": {} }
     
-    print(f"--- STARTING SCAN: {today_str} ---")
+    print(f"--- STEALTH SCAN STARTED: {today_str} ---")
     
     for hotel in COMPETITORS:
         print(f"Scanning: {hotel['name']}...")
-        time.sleep(random.uniform(3, 8)) # Sleep longer to be safe
+        time.sleep(random.uniform(3, 7)) # Sleep to prevent rate-limiting
         
         data = get_inventory(hotel['url'])
         
@@ -113,7 +112,7 @@ def main():
             print(f" -> Found {len(data)} room types.")
             new_entry["data"][hotel['name']] = data
         else:
-            print(f" -> No data found.")
+            print(f" -> No data found (Check Logs).")
             new_entry["data"][hotel['name']] = {}
 
     history.append(new_entry)
