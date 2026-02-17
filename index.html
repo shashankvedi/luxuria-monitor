@@ -26,7 +26,6 @@
     <div class="max-w-7xl mx-auto px-4 py-8">
         <div class="flex justify-between items-end mb-6">
             <h2 class="text-2xl font-bold text-slate-800">Market Overview</h2>
-            <!-- Dynamic Update Link -->
             <a id="update-link" href="#" target="_blank" class="hidden md:inline-flex items-center bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded shadow-sm text-sm">
                 <i class="fas fa-sync-alt mr-2 text-indigo-500"></i> Check Actions
             </a>
@@ -43,92 +42,46 @@
 
     <script>
         const MY_HOTEL_KEYWORD = "Luxuria";
-        
-        // Auto-configure the Actions Link
         const user = window.location.host.split('.')[0];
         const repo = window.location.pathname.split('/')[1];
-        if(user && repo) {
-            document.getElementById('update-link').href = `https://github.com/${user}/${repo}/actions`;
-        }
-
-        // --- MOCK DATA FOR PREVIEW ---
-        // This runs if prices.json is missing (like in this preview)
-        function getMockData() {
-            return [{
-                "date": new Date().toLocaleString(),
-                "data": {
-                    "Luxuria by Moustache": { "Deluxe Room": 3500, "Super Deluxe": 4200, "Royal Suite": 6500 },
-                    "Minimalist Varanasi": { "Standard": 3800, "Studio": 4500 },
-                    "Quality Inn Varanasi": { "Standard King": 4000, "Club Twin": 5200 },
-                    "Hotel Balaji Palace": { "Standard Room": 2800 },
-                    "Pearl Courtyard": { "Deluxe Double": 3200 },
-                    "Hotel Veda Vatica": { "Heritage Room": 4500 },
-                    "Hotel Hardik": { "Standard Room": 2500 },
-                    "Hotel Dolphin": { "Standard": 3000 },
-                    "Coco Cabana": { "Luxury Tent": 2000 }
-                }
-            }];
-        }
+        if(user && repo) document.getElementById('update-link').href = `https://github.com/${user}/${repo}/actions`;
 
         async function loadData() {
             const statusBadge = document.getElementById('status-badge');
             const loadingText = document.getElementById('loading-text');
-            const loadingSub = document.getElementById('loading-sub');
 
             try {
-                let history = [];
+                const response = await fetch('prices.json');
+                if (!response.ok) throw new Error("Database file missing");
                 
-                // 1. Try Fetching Data
-                try {
-                    const response = await fetch('prices.json');
-                    if (response.ok) {
-                        history = await response.json();
-                    } else {
-                        throw new Error("File not found");
-                    }
-                } catch (fetchError) {
-                    // If fetch fails (Preview Mode), use Mock Data
-                    console.warn("Could not load prices.json. Using Mock Data for Preview.");
-                    history = getMockData();
-                    statusBadge.innerText = "Preview Mode";
-                    statusBadge.className = "text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full";
-                }
+                const history = await response.json();
 
-                // 2. Check if Empty (real data might be empty [])
                 if (!history || history.length === 0) {
                     statusBadge.innerText = "No Data";
                     statusBadge.className = "text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full";
                     loadingText.innerText = "Database is Empty";
-                    loadingSub.innerHTML = `The scraper hasn't run yet.<br><a href="${document.getElementById('update-link').href}" class="text-blue-500 underline">Click here to Run Scraper</a>`;
-                    document.getElementById('loading-icon').className = "fas fa-database text-4xl mb-4 text-red-300";
+                    document.getElementById('loading-sub').innerHTML = "The scraper ran but found no data. Check Actions logs.";
                     return;
                 }
-
-                // 3. Render Data
                 renderInventory(history);
 
             } catch (e) {
-                console.error(e);
                 statusBadge.innerText = "Error";
                 statusBadge.className = "text-xs bg-red-600 text-white px-3 py-1 rounded-full";
                 loadingText.innerText = "System Error";
-                loadingSub.innerText = "Could not load data.";
+                document.getElementById('loading-sub').innerText = "Could not load prices.json.";
             }
         }
 
         function renderInventory(history) {
             const latest = history[history.length - 1];
-            // Only update date if not in preview/mock mode to avoid confusion, or show mock date
-            if (document.getElementById('status-badge').innerText !== "Preview Mode") {
-                 document.getElementById('status-badge').innerText = `Updated: ${latest.date}`;
-            }
+            document.getElementById('status-badge').innerText = `Updated: ${latest.date}`;
             
             const grid = document.getElementById('inventory-grid');
             grid.innerHTML = '';
             
             const hotelData = latest.data || latest.prices;
 
-            // Sort: My Hotel First
             const entries = Object.entries(hotelData).sort((a, b) => {
                 return b[0].includes(MY_HOTEL_KEYWORD) - a[0].includes(MY_HOTEL_KEYWORD);
             });
