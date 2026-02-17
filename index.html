@@ -19,50 +19,115 @@
                 <i class="fas fa-hotel text-2xl text-yellow-400"></i>
                 <h1 class="font-bold text-lg">Luxuria Monitor <span class="text-xs text-indigo-300 font-normal ml-1">Live Inventory</span></h1>
             </div>
-            <span id="last-updated" class="text-xs bg-indigo-800 px-3 py-1 rounded-full">Loading...</span>
+            <span id="status-badge" class="text-xs bg-indigo-800 px-3 py-1 rounded-full">System Ready</span>
         </div>
     </nav>
 
     <div class="max-w-7xl mx-auto px-4 py-8">
         <div class="flex justify-between items-end mb-6">
-            <h2 class="text-2xl font-bold text-slate-800">Market Overview <span class="text-sm font-normal text-slate-500 block mt-1">Comparision for tomorrow's rates</span></h2>
-            <a id="update-link" href="#" class="hidden md:inline-flex items-center bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded shadow-sm text-sm">
-                <i class="fas fa-sync-alt mr-2 text-indigo-500"></i> Update
+            <h2 class="text-2xl font-bold text-slate-800">Market Overview</h2>
+            <!-- Dynamic Update Link -->
+            <a id="update-link" href="#" target="_blank" class="hidden md:inline-flex items-center bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded shadow-sm text-sm">
+                <i class="fas fa-sync-alt mr-2 text-indigo-500"></i> Check Actions
             </a>
         </div>
 
         <div id="inventory-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-             <div class="col-span-full text-center py-20 text-slate-500">
-                <i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i><br>Loading data...
+             <div class="col-span-full text-center py-20 text-slate-500 bg-white rounded-lg border border-slate-200 shadow-sm">
+                <i id="loading-icon" class="fas fa-circle-notch fa-spin text-4xl mb-4 text-indigo-500"></i>
+                <h3 id="loading-text" class="text-lg font-bold text-slate-700">Connecting to Database...</h3>
+                <p id="loading-sub" class="text-sm text-slate-400 mt-2">Please wait.</p>
             </div>
         </div>
     </div>
 
     <script>
         const MY_HOTEL_KEYWORD = "Luxuria";
-        // Auto-detect Repo URL for button
-        const repo = window.location.href.split('github.io/')[1]?.split('/')[0];
-        if(repo) document.getElementById('update-link').href = `https://github.com/${window.location.host.split('.')[0]}/${repo}/actions`;
+        
+        // Auto-configure the Actions Link
+        const user = window.location.host.split('.')[0];
+        const repo = window.location.pathname.split('/')[1];
+        if(user && repo) {
+            document.getElementById('update-link').href = `https://github.com/${user}/${repo}/actions`;
+        }
+
+        // --- MOCK DATA FOR PREVIEW ---
+        // This runs if prices.json is missing (like in this preview)
+        function getMockData() {
+            return [{
+                "date": new Date().toLocaleString(),
+                "data": {
+                    "Luxuria by Moustache": { "Deluxe Room": 3500, "Super Deluxe": 4200, "Royal Suite": 6500 },
+                    "Quality Inn Varanasi": { "Standard King": 4000, "Club Twin": 5200 },
+                    "Hotel Balaji Palace": { "Standard Room": 2800 },
+                    "Pearl Courtyard": { "Deluxe Double": 3200 },
+                    "Hotel Veda Heritage": { "Heritage Room": 4500 },
+                    "Hotel Hardik": { "Standard Room": 2500 },
+                    "Hotel Dolphin": { "Standard": 3000 },
+                    "Vedangam": { "Luxury Tent": 2000 }
+                }
+            }];
+        }
 
         async function loadData() {
+            const statusBadge = document.getElementById('status-badge');
+            const loadingText = document.getElementById('loading-text');
+            const loadingSub = document.getElementById('loading-sub');
+
             try {
-                const response = await fetch('prices.json');
-                if (!response.ok) throw new Error("Data missing");
-                renderInventory(await response.json());
+                let history = [];
+                
+                // 1. Try Fetching Data
+                try {
+                    const response = await fetch('prices.json');
+                    if (response.ok) {
+                        history = await response.json();
+                    } else {
+                        throw new Error("File not found");
+                    }
+                } catch (fetchError) {
+                    // If fetch fails (Preview Mode), use Mock Data
+                    console.warn("Could not load prices.json. Using Mock Data for Preview.");
+                    history = getMockData();
+                    statusBadge.innerText = "Preview Mode";
+                    statusBadge.className = "text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full";
+                }
+
+                // 2. Check if Empty (real data might be empty [])
+                if (!history || history.length === 0) {
+                    statusBadge.innerText = "No Data";
+                    statusBadge.className = "text-xs bg-red-100 text-red-800 px-3 py-1 rounded-full";
+                    loadingText.innerText = "Database is Empty";
+                    loadingSub.innerHTML = `The scraper hasn't run yet.<br><a href="${document.getElementById('update-link').href}" class="text-blue-500 underline">Click here to Run Scraper</a>`;
+                    document.getElementById('loading-icon').className = "fas fa-database text-4xl mb-4 text-red-300";
+                    return;
+                }
+
+                // 3. Render Data
+                renderInventory(history);
+
             } catch (e) {
-                document.getElementById('inventory-grid').innerHTML = `<div class="col-span-full text-center py-10 bg-white rounded shadow text-red-500 font-bold">No Data Found. Please run the Scraper in Actions tab.</div>`;
+                console.error(e);
+                statusBadge.innerText = "Error";
+                statusBadge.className = "text-xs bg-red-600 text-white px-3 py-1 rounded-full";
+                loadingText.innerText = "System Error";
+                loadingSub.innerText = "Could not load data.";
             }
         }
 
         function renderInventory(history) {
-            if (!history.length) return;
             const latest = history[history.length - 1];
-            document.getElementById('last-updated').innerText = `Last Scan: ${latest.date}`;
+            // Only update date if not in preview/mock mode to avoid confusion, or show mock date
+            if (document.getElementById('status-badge').innerText !== "Preview Mode") {
+                 document.getElementById('status-badge').innerText = `Updated: ${latest.date}`;
+            }
             
             const grid = document.getElementById('inventory-grid');
             grid.innerHTML = '';
             
             const hotelData = latest.data || latest.prices;
+
+            // Sort: My Hotel First
             const entries = Object.entries(hotelData).sort((a, b) => {
                 return b[0].includes(MY_HOTEL_KEYWORD) - a[0].includes(MY_HOTEL_KEYWORD);
             });
@@ -76,7 +141,7 @@
                 
                 if (!inventory || Object.keys(inventory).length === 0) {
                      lowest = 0;
-                     listHtml = `<li class="text-center text-red-400 text-sm italic py-4">Sold Out / No Data</li>`;
+                     listHtml = `<li class="text-center text-red-400 text-sm italic py-4">No rates available</li>`;
                 } else {
                     Object.entries(inventory).sort((a,b) => a[1]-b[1]).forEach(([room, price]) => {
                         count++;
