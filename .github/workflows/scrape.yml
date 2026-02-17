@@ -13,11 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - run: pip install requests beautifulsoup4
+          
+      # KEY CHANGE: Installing 'curl_cffi' for stealth mode
+      - run: pip install curl_cffi beautifulsoup4
+      
       - run: python scraper.py
+      
       - run: |
           git config --global user.name 'GitHub Action'
           git config --global user.email 'action@github.com'
